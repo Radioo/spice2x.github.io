@@ -542,6 +542,7 @@ set(SOURCE_FILES ${SOURCE_FILES}
         games/onpara/touchpanel.cpp
         games/bc/bc.cpp
         games/bc/io.cpp
+        games/bc/bi2x_hook.cpp
         games/ccj/ccj.cpp
         games/ccj/io.cpp
         games/ccj/bi2x_hook.cpp
@@ -558,6 +559,10 @@ set(SOURCE_FILES ${SOURCE_FILES}
         games/udn/udn.cpp
         games/udn/io.cpp
         games/udn/bi2x_hook.cpp
+        games/cardconnect/cardconnect.cpp
+        games/cardconnect/io.cpp
+        games/cardconnect/bi2x_hook.cpp
+        games/cardconnect/printer.cpp
 
         # hooks
         hooks/audio/acm.cpp

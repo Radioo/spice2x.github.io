@@ -65,7 +65,7 @@ namespace execexe {
                                                   DWORD dwFlagsAndAttributes, HANDLE hTemplateFile) {
         monodebug::poll();
 
-        if (lpFileName == port_name && acio->open(lpFileName)) {
+        if (lpFileName == port_name) {
             if (!port_opened) {
                 port_opened = acio->open(port_name.c_str());
             } else {

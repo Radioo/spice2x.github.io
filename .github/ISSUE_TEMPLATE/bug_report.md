@@ -1,6 +1,6 @@
 ---
-name: Bug report
-about: Create a report to help us improve
+name: Bug report (NOT for troubleshooting or asking for help)
+about: 'File a bug in spice2x'
 title: ''
 labels: bug
 assignees: ''
