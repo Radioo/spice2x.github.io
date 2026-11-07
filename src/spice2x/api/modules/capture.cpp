@@ -3,6 +3,8 @@
 #include <functional>
 #include <mutex>
 #include <unordered_map>
+#include <vector>
+#include <windows.h>
 #include "api/capture_pump.h"
 #include "api/stream_format.h"
 #include "api/stream_server.h"
@@ -10,6 +12,7 @@
 #include "hooks/graphics/graphics.h"
 #include "hooks/graphics/jpeg_encoder.h"
 #include "util/crypt.h"
+#include "util/time.h"
 
 using namespace std::placeholders;
 using namespace rapidjson;
@@ -71,6 +74,80 @@ namespace api::modules {
         return true;
     }
 
+    static BOOL CALLBACK find_largest_process_window(HWND hwnd, LPARAM param) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        const bool overlay = (GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_LAYERED) != 0;
+        if (pid != GetCurrentProcessId() || !IsWindowVisible(hwnd) || overlay) {
+            return TRUE;
+        }
+
+        RECT rect {};
+        GetClientRect(hwnd, &rect);
+        auto best = reinterpret_cast<std::pair<HWND, LONG> *>(param);
+        const LONG area = rect.right * rect.bottom;
+        if (area > best->second) {
+            *best = { hwnd, area };
+        }
+        return TRUE;
+    }
+
+    static bool capture_gdi_window(std::shared_ptr<uint8_t[]> &out, int divide, int *width, int *height) {
+        std::pair<HWND, LONG> best { nullptr, 0 };
+        EnumWindows(find_largest_process_window, reinterpret_cast<LPARAM>(&best));
+        if (best.first == nullptr) {
+            return false;
+        }
+
+        RECT rect {};
+        GetClientRect(best.first, &rect);
+        const int source_width = rect.right;
+        const int source_height = rect.bottom;
+
+        HDC window_dc = GetDC(best.first);
+        HDC memory_dc = CreateCompatibleDC(window_dc);
+        HBITMAP bitmap = CreateCompatibleBitmap(window_dc, source_width, source_height);
+        HGDIOBJ previous = SelectObject(memory_dc, bitmap);
+        const bool copied_window = BitBlt(memory_dc, 0, 0, source_width, source_height, window_dc, 0, 0, SRCCOPY) != FALSE;
+        SelectObject(memory_dc, previous);
+
+        BITMAPINFOHEADER info {};
+        info.biSize = sizeof(info);
+        info.biWidth = source_width;
+        info.biHeight = -source_height;
+        info.biPlanes = 1;
+        info.biBitCount = 32;
+        info.biCompression = BI_RGB;
+        std::vector<uint8_t> bgrx(static_cast<size_t>(source_width) * source_height * 4);
+        const bool copied = copied_window && GetDIBits(memory_dc, bitmap, 0, source_height, bgrx.data(),
+                reinterpret_cast<BITMAPINFO *>(&info), DIB_RGB_COLORS) == source_height;
+
+        DeleteObject(bitmap);
+        DeleteDC(memory_dc);
+        ReleaseDC(best.first, window_dc);
+        if (!copied) {
+            return false;
+        }
+
+        const int step = divide > 1 ? divide : 1;
+        const int target_width = (source_width + step - 1) / step;
+        const int target_height = (source_height + step - 1) / step;
+        out = std::shared_ptr<uint8_t[]>(new uint8_t[static_cast<size_t>(target_width) * target_height * 3]);
+        for (int y = 0; y < target_height; y++) {
+            for (int x = 0; x < target_width; x++) {
+                const uint8_t *source = &bgrx[(static_cast<size_t>(y * step) * source_width + x * step) * 4];
+                uint8_t *target = &out[(static_cast<size_t>(y) * target_width + x) * 3];
+                target[0] = source[2];
+                target[1] = source[1];
+                target[2] = source[0];
+            }
+        }
+
+        *width = target_width;
+        *height = target_height;
+        return true;
+    }
+
     Capture::Capture() : Module("capture") {
         functions["get_screens"] = std::bind(&Capture::get_screens, this, _1, _2);
         functions["get_jpg"] = std::bind(&Capture::get_jpg, this, _1, _2);
@@ -128,6 +205,11 @@ namespace api::modules {
         std::shared_ptr<uint8_t[]> pixels;
         bool success = capture_pump::capture_direct(
                 screen, pixels, divide, &timestamp, &width, &height);
+
+        if (!success && screen == 0 && !graphics_capture_last_size(screen, nullptr, nullptr)) {
+            success = capture_gdi_window(pixels, divide, &width, &height);
+            timestamp = static_cast<uint64_t>(get_performance_milliseconds());
+        }
 
         if (success) {
             CAPTURE_BUFFER.clear();
