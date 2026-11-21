@@ -14,13 +14,37 @@ namespace mouseoverride {
     static std::mutex STATE_M;
     static bool ACTIVE = false;
     static bool PRESSED = false;
+    static bool DRIVEN = false;
     static POINT POSITION {};
 
     static decltype(GetCursorPos) *GetCursorPos_orig = nullptr;
+    static decltype(GetFocus) *GetFocus_orig = nullptr;
+    static decltype(GetActiveWindow) *GetActiveWindow_orig = nullptr;
     static bool HOOK_FAILED = false;
 
     static HWND game_window() {
         return graphics_game_window();
+    }
+
+    static bool driven() {
+        std::lock_guard<std::mutex> lock(STATE_M);
+        return DRIVEN;
+    }
+
+    static HWND WINAPI GetFocus_hook() {
+        auto window = game_window();
+        if (driven() && window != nullptr) {
+            return window;
+        }
+        return GetFocus_orig();
+    }
+
+    static HWND WINAPI GetActiveWindow_hook() {
+        auto window = game_window();
+        if (driven() && window != nullptr) {
+            return window;
+        }
+        return GetActiveWindow_orig();
     }
 
     static BOOL WINAPI GetCursorPos_hook(LPPOINT lpPoint) {
@@ -79,15 +103,33 @@ namespace mouseoverride {
         }
 
         log_info("mouseoverride", "hooked GetCursorPos in {}", CURSOR_MODULE);
+
+        GetFocus_orig = detour::iat_try("GetFocus", GetFocus_hook, module);
+        GetActiveWindow_orig = detour::iat_try("GetActiveWindow", GetActiveWindow_hook, module);
+        if (GetFocus_orig == nullptr || GetActiveWindow_orig == nullptr) {
+            log_warning("mouseoverride", "could not hook GetFocus/GetActiveWindow in {}, "
+                    "UI that ignores input without focus will not see clicks", CURSOR_MODULE);
+        }
+
         return true;
     }
 
-    static void post(UINT message, WPARAM buttons, POINT position) {
+    static void post_raw(UINT message, WPARAM wparam, LPARAM lparam) {
         auto window = game_window();
         if (window == nullptr) {
             return;
         }
-        PostMessageW(window, message, buttons, MAKELPARAM(position.x, position.y));
+        PostMessageW(window, message, wparam, lparam);
+    }
+
+    static void post(UINT message, WPARAM buttons, POINT position) {
+        post_raw(message, buttons, MAKELPARAM(position.x, position.y));
+    }
+
+    static void announce_focus() {
+        post_raw(WM_ACTIVATEAPP, TRUE, 0);
+        post_raw(WM_ACTIVATE, WA_ACTIVE, 0);
+        post_raw(WM_SETFOCUS, 0, 0);
     }
 
     bool available() {
@@ -101,8 +143,13 @@ namespace mouseoverride {
             std::lock_guard<std::mutex> lock(STATE_M);
             was_pressed = ACTIVE && PRESSED;
             ACTIVE = true;
+            DRIVEN = true;
             PRESSED = pressed;
             POSITION = position;
+        }
+
+        if (pressed && !was_pressed) {
+            announce_focus();
         }
 
         post(WM_MOUSEMOVE, pressed ? MK_LBUTTON : 0, position);

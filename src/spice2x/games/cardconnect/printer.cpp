@@ -14,6 +14,7 @@
 
 #include "games/shared/printer.h"
 #include "util/detour.h"
+#include "util/fileutils.h"
 #include "util/libutils.h"
 #include "util/logging.h"
 
@@ -63,6 +64,7 @@ namespace games::cardconnect {
     static constexpr uint16_t CARD_HEIGHT = 1024;
     static constexpr uint32_t RIBBON_REMAINING = 4096;
     static constexpr auto PRINT_TIME = std::chrono::seconds(5);
+    static constexpr const char *DEFAULT_OUTPUT_DIR = "printed_cards";
 
     static constexpr std::optional<std::chrono::seconds> get_mode_delay(uint8_t mode) {
         // Printer::GetPrintTime adds 10s for holo and 8s per finished side.
@@ -574,6 +576,12 @@ namespace games::cardconnect {
         }
 
         log_info("cardconnect::printer", "enabling C320D printer emulation");
+        if (games::shared::PRINTER_PATH.empty()) {
+            games::shared::PRINTER_PATH.emplace_back(DEFAULT_OUTPUT_DIR);
+        }
+        for (const auto &path : games::shared::PRINTER_PATH) {
+            fileutils::dir_create_recursive_log("cardconnect::printer", path);
+        }
         games::shared::printer_init_output({"_front", "_back"});
         libutils::load_library("game\\tcs_data\\Plugins\\C320Dusb.dll");
 
