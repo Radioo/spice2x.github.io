@@ -2,11 +2,14 @@
 
 #include "avs/game.h"
 #include "games/gitadora/gitadora.h"
+#include "misc/backgroundwindow.h"
 #include "cfg/screen_resize.h"
 #include "overlay/overlay.h"
 #include "util/logging.h"
 #include "util/utils.h"
 #include "touch/touch.h"
+
+#include <optional>
 
 #if 0
 #define log_debug(module, format_str, ...) logger::push( \
@@ -46,7 +49,9 @@ bool GRAPHICS_WSUB_ALWAYS_ON_TOP = false;
 
 // these flags are carefully constructed to ensure maximum compatibility
 // (e.g., DDR likes to hang when SetWindowPos is called with certain params)
-static const DWORD SETWINDOWPOS_NOOP = 
+static std::optional<POINT> pinned_position;
+
+static const DWORD SETWINDOWPOS_NOOP =
     SWP_NOMOVE |
     SWP_NOSIZE |
     SWP_NOREDRAW |
@@ -453,6 +458,23 @@ void graphics_windowed_wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPara
     }
 
     switch (uMsg) {
+        case WM_WINDOWPOSCHANGING: {
+            auto *position = reinterpret_cast<WINDOWPOS *>(lParam);
+            if (pinned_position.has_value() && position != nullptr && !(position->flags & SWP_NOMOVE)
+                && (position->x != pinned_position->x || position->y != pinned_position->y)) {
+                log_misc(
+                    "graphics-windowed",
+                    "[{}] keeping the window at {}x{} instead of moving it to {}x{}",
+                    fmt::ptr(hWnd),
+                    pinned_position->x,
+                    pinned_position->y,
+                    position->x,
+                    position->y);
+                position->x = pinned_position->x;
+                position->y = pinned_position->y;
+            }
+            break;
+        }
         case WM_MOVE: {
             log_debug("graphics-windowed", "graphics_windowed_wndproc called with WM_MOVE");
             RECT rect;
@@ -680,6 +702,7 @@ void graphics_update_z_order(HWND hWnd, bool always_on_top) {
 
     HWND insert_after = nullptr;
     if (always_on_top) {
+        backgroundwindow::allow_topmost(hWnd);
         insert_after = HWND_TOPMOST;
     } else {
         insert_after = HWND_NOTOPMOST;
@@ -731,6 +754,11 @@ void graphics_move_resize_window(HWND hWnd) {
 
     const auto w = cfg::SCREENRESIZE->client_width + cfg::SCREENRESIZE->window_deco_width;
     const auto h = cfg::SCREENRESIZE->client_height + cfg::SCREENRESIZE->window_deco_height;
+
+    pinned_position = POINT {
+        cfg::SCREENRESIZE->window_offset_x,
+        cfg::SCREENRESIZE->window_offset_y,
+    };
 
     auto flags = SETWINDOWPOS_NOOP;
     flags &= ~SWP_NOSIZE;
