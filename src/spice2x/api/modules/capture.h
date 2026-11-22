@@ -20,5 +20,6 @@ namespace api::modules {
         void get_screens(Request &req, Response &res);
         void get_jpg(Request &req, Response &res);
         void get_streams(Request &req, Response &res);
+        void record_presents(Request &req, Response &res);
     };
 }

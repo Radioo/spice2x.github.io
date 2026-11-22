@@ -125,7 +125,7 @@ HRESULT STDMETHODCALLTYPE ResizeTarget_hook(
 } // namespace
 
 void schedule_window_attach(IDXGISwapChain *swapchain) {
-    if (!GRAPHICS_WINDOWED || !avs::game::is_model("UDN") ||
+    if (!GRAPHICS_WINDOWED || !avs::game::is_model({"UDN", "XIF"}) ||
         !is_main_game_swapchain(swapchain)) {
         return;
     }

@@ -6,6 +6,7 @@
 #include <format>
 
 #include "bi2x_hook.h"
+#include "cfg/screen_resize.h"
 #include "util/detour.h"
 #include "util/logging.h"
 #include "util/fileutils.h"
@@ -27,6 +28,38 @@ namespace games::pc {
     static decltype(RegisterRawInputDevices) *RegisterRawInputDevices_orig = nullptr;
     static decltype(EnumDisplaySettingsW) *EnumDisplaySettingsW_orig = nullptr;
     static decltype(QueryDisplayConfig) *QueryDisplayConfig_orig = nullptr;
+
+    static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM w_param, LPARAM l_param) {
+        if (!GRAPHICS_WINDOWED || GRAPHICS_HOOKED_WINDOW != window) {
+            return 0;
+        }
+
+        static bool interactive_resize = false;
+        switch (message) {
+            case WM_ENTERSIZEMOVE:
+                interactive_resize = true;
+                break;
+            case WM_EXITSIZEMOVE:
+                interactive_resize = false;
+                break;
+            case WM_WINDOWPOSCHANGING:
+                if (!interactive_resize && cfg::SCREENRESIZE->enable_window_resize) {
+                    auto position = reinterpret_cast<WINDOWPOS *>(l_param);
+                    if (!(position->flags & SWP_NOMOVE)) {
+                        position->x = cfg::SCREENRESIZE->window_offset_x;
+                        position->y = cfg::SCREENRESIZE->window_offset_y;
+                    }
+                    if (!(position->flags & SWP_NOSIZE)) {
+                        position->cx = cfg::SCREENRESIZE->client_width +
+                            cfg::SCREENRESIZE->window_deco_width;
+                        position->cy = cfg::SCREENRESIZE->client_height +
+                            cfg::SCREENRESIZE->window_deco_height;
+                    }
+                }
+                break;
+        }
+        return 0;
+    }
 
     static BOOL WINAPI RegisterRawInputDevices_hook(PCRAWINPUTDEVICE pRawInputDevices, UINT uiNumDevices, UINT cbSize) {
 
@@ -105,6 +138,10 @@ namespace games::pc {
         detour::trampoline_try(user32Dll, "EnumDisplaySettingsW",
                                EnumDisplaySettingsW_hook, &EnumDisplaySettingsW_orig);
 
+        if (GRAPHICS_WINDOWED) {
+            graphics_add_wnd_proc(window_proc);
+        }
+
         if (GRAPHICS_SHOW_CURSOR) {
             unity_utils::force_show_cursor(true);
         }
@@ -118,6 +155,7 @@ namespace games::pc {
 
     void PCGame::detach() {
         Game::detach();
+        graphics_remove_wnd_proc(window_proc);
 
         devicehook_dispose();
     }

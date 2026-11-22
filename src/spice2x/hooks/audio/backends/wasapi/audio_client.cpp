@@ -102,9 +102,9 @@ IAudioClient3 *wrap_audio_client3(IAudioClient3 *audio_client) {
     log_misc("audio::wasapi", "wrapping IAudioClient3");
 
     if (hooks::audio::BACKEND.has_value()) {
-        log_fatal(
+        log_warning(
             "audio::wasapi",
-            "IAudioClient3 does not currently support backends! clear -audiobackend and try again");
+            "IAudioClient3 does not support backends, this client keeps its own output");
     }
     if (hooks::audio::USE_DUMMY) {
         log_fatal(

@@ -10,6 +10,7 @@
 #include "api/stream_server.h"
 #include "external/rapidjson/document.h"
 #include "hooks/graphics/graphics.h"
+#include "hooks/graphics/backends/d3d9/d3d9_present_recorder.h"
 #include "hooks/graphics/jpeg_encoder.h"
 #include "util/crypt.h"
 #include "util/time.h"
@@ -152,6 +153,7 @@ namespace api::modules {
         functions["get_screens"] = std::bind(&Capture::get_screens, this, _1, _2);
         functions["get_jpg"] = std::bind(&Capture::get_jpg, this, _1, _2);
         functions["get_streams"] = std::bind(&Capture::get_streams, this, _1, _2);
+        functions["record_presents"] = std::bind(&Capture::record_presents, this, _1, _2);
     }
 
     /**
@@ -320,5 +322,16 @@ namespace api::modules {
         info.AddMember("screens", screens, alloc);
 
         res.add_data(info);
+    }
+
+    void Capture::record_presents(Request &req, Response &res) {
+        if (req.params.Size() < 3 || !req.params[0].IsUint() || !req.params[1].IsUint()
+                || !req.params[2].IsString()) {
+            return error_params_insufficient(res);
+        }
+        d3d9_present_recorder::start(
+                static_cast<int>(req.params[0].GetUint()),
+                static_cast<int>(req.params[1].GetUint()),
+                req.params[2].GetString());
     }
 }

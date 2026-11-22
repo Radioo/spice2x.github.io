@@ -1,4 +1,5 @@
 #include "d3d9_backend.h"
+#include "d3d9_present_recorder.h"
 
 #include <atomic>
 #include <cassert>
@@ -1487,6 +1488,8 @@ void graphics_d3d9_on_present(
     }
 
     graphics_poll_screenshot_hotkey();
+
+    d3d9_present_recorder::on_present(device, wrapped_device);
 
     // before the overlay render so the screenshot excludes it
     if (!GRAPHICS_SCREENSHOT_INCLUDE_OVERLAY) {
