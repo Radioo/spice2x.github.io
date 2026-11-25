@@ -283,6 +283,21 @@ HRESULT STDMETHODCALLTYPE WrappedIAudioClient::Initialize(
                 hnsPeriodicity,
                 device_format,
                 AudioSessionGuid);
+        if (ret == AUDCLNT_E_UNSUPPORTED_FORMAT && ShareMode == AUDCLNT_SHAREMODE_SHARED
+                && (StreamFlags & AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM) == 0) {
+            StreamFlags |= AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
+            log_info("audio::wasapi",
+                    "shared stream format is not the device mix format, retrying with AUTOCONVERTPCM");
+            ret = initialize_with_alignment_retry(
+                    pReal,
+                    "audio::wasapi",
+                    ShareMode,
+                    StreamFlags,
+                    hnsBufferDuration,
+                    hnsPeriodicity,
+                    device_format,
+                    AudioSessionGuid);
+        }
     }
 
     // check for failure
