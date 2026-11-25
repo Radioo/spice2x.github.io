@@ -431,6 +431,7 @@ namespace avs {
         extern size_t HEAP_SIZE;
         extern bool DEFAULT_HEAP_SIZE_SET;
         extern std::string LOG_PATH;
+        extern std::string INSTANCE_NAME;
         extern std::string CFG_PATH;
         extern std::string LOG_LEVEL_CUSTOM;
 

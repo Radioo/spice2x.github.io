@@ -986,6 +986,13 @@ int main_implementation(int argc, char *argv[]) {
     if (options[launcher::Options::PathToLog].is_active()) {
         avs::core::LOG_PATH = options[launcher::Options::PathToLog].value_text();
     }
+    if (options[launcher::Options::InstanceName].is_active()) {
+        avs::core::INSTANCE_NAME = options[launcher::Options::InstanceName].value_text();
+        if (!options[launcher::Options::PathToLog].is_active()) {
+            avs::core::LOG_PATH = fmt::format("log-{}.txt", avs::core::INSTANCE_NAME);
+        }
+        SetEnvironmentVariableA("SPICE2X_INSTANCE", avs::core::INSTANCE_NAME.c_str());
+    }
     if (options[launcher::Options::PCBID].is_active()) {
         avs::ea3::PCBID_CUSTOM = options[launcher::Options::PCBID].value_text();
     }

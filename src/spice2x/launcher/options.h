@@ -164,6 +164,7 @@ namespace launcher {
             PathToAvsConfig,
             PathToBootstrap,
             PathToLog,
+            InstanceName,
             APITCPPort,
             APIPassword,
             APIVerboseLogging,

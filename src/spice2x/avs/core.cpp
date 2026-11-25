@@ -126,6 +126,7 @@ namespace avs {
         size_t HEAP_SIZE = 0x1000000;
         bool DEFAULT_HEAP_SIZE_SET = false;
         std::string LOG_PATH;
+        std::string INSTANCE_NAME;
         std::string CFG_PATH;
         std::string LOG_LEVEL_CUSTOM;
 
@@ -1920,6 +1921,76 @@ namespace avs {
             } while ((vfs_node = property_node_traversal(vfs_node, TRAVERSE_NEXT_SEARCH_RESULT)));
         }
 
+        static std::optional<std::string> instance_dev_path(const std::string &path) {
+            for (const std::string prefix : { "./dev", ".\\dev", "dev" }) {
+                if (path.size() < prefix.size() || _strnicmp(path.c_str(), prefix.c_str(), prefix.size()) != 0) {
+                    continue;
+                }
+                if (path.size() > prefix.size() && path[prefix.size()] != '/' && path[prefix.size()] != '\\') {
+                    continue;
+                }
+                return fmt::format("{}-{}{}", prefix, INSTANCE_NAME, path.substr(prefix.size()));
+            }
+            return std::nullopt;
+        }
+
+        static void move_instance_device(
+                struct property_info *prop,
+                struct node_info *node,
+                const char *folder_name)
+        {
+            char device_path[2048] { 0 };
+            auto device_node_path = fmt::format("/fs/{}/device", folder_name);
+            auto device_node = property_search(prop, node, device_node_path.c_str());
+
+            if (!device_node || property_node_refer(prop, node, device_node_path.c_str(), NODE_TYPE_str,
+                    device_path, sizeof(device_path)) < 0) {
+                return;
+            }
+
+            auto moved = instance_dev_path(device_path);
+            if (!moved) {
+                return;
+            }
+
+            property_node_remove(device_node);
+            property_node_create(prop, node, NODE_TYPE_str, device_node_path.c_str(), moved->c_str());
+            log_info("avs-core", "instance '{}': {} {} -> {}", INSTANCE_NAME, folder_name, device_path, *moved);
+        }
+
+        static void move_instance_mounts(
+                struct property_info *prop,
+                struct node_info *node)
+        {
+            char src_path[2048] { 0 };
+
+            auto table_node = property_search(prop, node, "/fs/mounttable");
+            if (!table_node) {
+                return;
+            }
+
+            auto vfs_node = property_search(prop, table_node, "vfs");
+            if (!vfs_node) {
+                return;
+            }
+
+            do {
+                if (property_node_refer(prop, vfs_node, "src@", NODE_TYPE_attr, src_path, sizeof(src_path)) < 0) {
+                    continue;
+                }
+
+                auto moved = instance_dev_path(src_path);
+                auto src_node = property_search(prop, vfs_node, "src@");
+                if (!moved || !src_node) {
+                    continue;
+                }
+
+                property_node_remove(src_node);
+                property_node_create(prop, vfs_node, NODE_TYPE_attr, "src@", moved->c_str());
+                log_info("avs-core", "instance '{}': mount {} -> {}", INSTANCE_NAME, src_path, *moved);
+            } while ((vfs_node = property_node_traversal(vfs_node, TRAVERSE_NEXT_SEARCH_RESULT)));
+        }
+
         void boot() {
             // default config path
             CFG_PATH = !CFG_PATH.empty() ? CFG_PATH : "prop/avs-config.xml";
@@ -1929,6 +2000,12 @@ namespace avs {
             // read configuration
             auto config = config_read(CFG_PATH);
             auto config_node = property_search_safe(config, nullptr, "/config");
+
+            if (!INSTANCE_NAME.empty()) {
+                move_instance_device(config, config_node, "nvram");
+                move_instance_device(config, config_node, "raw");
+                move_instance_mounts(config, config_node);
+            }
 
             // create nvram and raw directories if possible for non-mounttable configurations
             create_avs_config_fs_dir(config, config_node, "nvram");

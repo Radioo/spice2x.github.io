@@ -1653,6 +1653,16 @@ static const std::vector<OptionDefinition> OPTION_DEFINITIONS = std::invoke([]()
         .picker = OptionPickerType::FilePath,
         .file_extension = "TXT",
     };
+    c[launcher::Options::InstanceName] = {
+        .title = "Instance Name",
+        .name = "instance",
+        .desc = "Runs this process as its own instance of the game install, so several instances can run from one "
+                "install at the same time. The AVS dev mounts (nvram, raw) move from dev to dev-<name>, log.txt "
+                "becomes log-<name>.txt unless the log path is set, and hook DLLs can read the name from the "
+                "SPICE2X_INSTANCE environment variable.",
+        .type = OptionType::Text,
+        .category = "Path Overrides",
+    };
     c[launcher::Options::APITCPPort] = {
         .title = "API TCP Port",
         .name = "api",

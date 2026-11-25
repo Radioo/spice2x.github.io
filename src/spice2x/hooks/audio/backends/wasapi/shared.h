@@ -68,6 +68,8 @@ namespace hooks::audio {
         // frames currently queued in the FIFO and not yet handed to the device.
         UINT32 pending_frames() const;
 
+        UINT32 align_like_exclusive(UINT32 frames) const;
+
         // FIFO bridge state (see enable_bridge). fifo holds audio queued for the device in the
         // game's interleaved frame format; the game writes new frames directly into its tail between
         // begin_write and commit_write. frame_bytes > 0 doubles as the "bridge armed" flag (see

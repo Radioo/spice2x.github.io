@@ -1,6 +1,7 @@
 #include "shared.h"
 
 #include <algorithm>
+#include <numeric>
 
 #include <audioclient.h>
 
@@ -11,6 +12,8 @@
 #include "defs.h"
 
 namespace hooks::audio {
+
+    static constexpr UINT32 EXCLUSIVE_BUFFER_ALIGNMENT_BYTES = 128;
 
     // whether the engine's PCM converter can handle this format. PCM / float only; non-PCM
     // bitstream (AC-3 / DTS passthrough) must be left alone.
@@ -71,15 +74,25 @@ namespace hooks::audio {
         // period_frames = period * sample_rate / 10^7.
         REFERENCE_TIME period = 0;
         if (SUCCEEDED(real->GetDevicePeriod(&period, nullptr)) && period > 0) {
-            const UINT32 period_frames = (UINT32) ((period * sample_rate) / 10000000);
+            const UINT32 period_frames = this->align_like_exclusive((UINT32) ((period * sample_rate) / 10000000));
             if (period_frames > 0 && period_frames < device_frames) {
                 this->reported_frames = period_frames;
                 return period_frames;
             }
         }
 
-        this->reported_frames = device_frames;
-        return device_frames;
+        this->reported_frames = this->align_like_exclusive(device_frames);
+        return this->reported_frames;
+    }
+
+    UINT32 SharedRedirect::align_like_exclusive(UINT32 frames) const {
+        if (this->frame_bytes <= 0) {
+            return frames;
+        }
+
+        const UINT32 step = EXCLUSIVE_BUFFER_ALIGNMENT_BYTES
+                / std::gcd(EXCLUSIVE_BUFFER_ALIGNMENT_BYTES, (UINT32) this->frame_bytes);
+        return std::max(step, frames - frames % step);
     }
 
     void SharedRedirect::enable_bridge(int frame_bytes) {
